@@ -1,22 +1,11 @@
 
-pipeline {
-    agent { docker { image 'maven:3.3.3' } }
-    stages {
-        stage('build') {
-            steps {
-                sh 'mvn --version'
-            }
-        }
-    }
-}
 
-/*
 node {
     def app
 
     stage('Clone repository') {
         /* Let's make sure we have the repository cloned to our workspace */
-        git uri: https://github.com/dhanan77/testrepo-jenkins
+        git uri https://github.com/dhanan77/testrepo-jenkins
         checkout scm
     }
 
@@ -51,4 +40,4 @@ node {
 
 
 
-*/
+
