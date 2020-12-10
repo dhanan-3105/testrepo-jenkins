@@ -5,7 +5,7 @@ node {
 
     stage('Clone repository') {
         /* Let's make sure we have the repository cloned to our workspace */
-        git uri https://github.com/dhanan77/testrepo-jenkins
+        git url: https://github.com/dhanan77/testrepo-jenkins
         checkout scm
     }
 
