@@ -1,0 +1,38 @@
+Use case: 
+Adding Slack Integration 
+
+Step 1
+Visit App.slack.com and Search for Apps - Jenkins CI
+Add to Slack.
+Add the channel (For instance - #general)
+
+Step 2
+Now, In Configuration Page of Jenkins (In Slack)
+Copy the domain name (Refer Step 3 of the page)
+Copy the Token. (Refer Step 3 of the page)
+Click Save Settings.
+
+Step 3
+Now Go to Manage Jenkins Page
+Select Manage Configuration under Security
+Add Credentials as Secret Tex
+Enter the Text as <<token-copied from Step2>>
+Save the ID as slack API
+
+Step 4
+Now Go to Project
+Add post-build Step
+Add Slack Notification
+Choose the Event as Notify Success
+Enter the workspace name (domain name copied from step2)
+Choose the credential (saved in step 3)
+Choose the channel #general
+Test Connection (Verify Slack is successful)
+Save the Project
+
+Step 5
+Go to Project 
+Build a Pipeline
+Verify Slack in the slack channel post build
+
+
