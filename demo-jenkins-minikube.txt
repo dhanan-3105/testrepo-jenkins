@@ -1,0 +1,233 @@
+Create a Docker Image - newjenkins1 with the below Docker file
+Step 1
+
+Dockerfile
+===========
+FROM jenkins/jenkins:lts
+MAINTAINER DJ
+USER root
+# Install the latest Docker CE binaries and add user `jenkins` to the docker group
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install apt-transport-https \
+      ca-certificates \
+      curl \
+      gnupg2 \
+      software-properties-common && \
+    curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg > /tmp/dkey; apt-key add /tmp/dkey && \
+    add-apt-repository \
+      "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+      $(lsb_release -cs) \
+      stable" && \
+   apt-get update && \
+   apt-get -y --no-install-recommends install docker-ce && \
+   apt-get clean && \
+   usermod -aG docker jenkins
+
+# drop back to the regular jenkins user - good practice
+USER jenkins
+
+Step 2
+docker build -t newjenkins1 -f Dockerfile .
+
+Step 3
+In the minikube cluster - Create the below file (demojenkins.yaml)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: default
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: jenkins
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources: ["pods","services"]
+  verbs: ["create","delete","get","list","patch","update","watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["create","delete","get","list","patch","update","watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create","delete","get","list","patch","update","watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get","list","watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["create","delete","get","list","patch","update","watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: jenkins
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jenkins
+subjects:
+- kind: ServiceAccount
+  name: jenkins
+---
+# Allows jenkins to create persistent volumes
+# This cluster role binding allows anyone in the "manager" group to read secrets in any namespace.
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: jenkins-crb
+subjects:
+- kind: ServiceAccount
+  namespace: default
+  name: jenkins
+roleRef:
+  kind: ClusterRole
+  name: jenkinsclusterrole
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  # "namespace" omitted since ClusterRoles are not namespaced
+  name: jenkinsclusterrole
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["create","delete","get","list","patch","update","watch"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: jenkins
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: jenkins
+    spec:
+      containers:
+        - name: jenkins
+          image: newjenkins:2
+          env:
+            - name: JAVA_OPTS
+              value: -Djenkins.install.runSetupWizard=false
+          ports:
+            - name: http-port
+              containerPort: 8080
+            - name: jnlp-port
+              containerPort: 50000
+          volumeMounts:
+            - name: jenkins-home
+              mountPath: /var/jenkins_home
+            - name: docker-sock-volume
+              mountPath: "/var/run/docker.sock"
+          imagePullPolicy: Never
+      volumes:
+        # This allows jenkins to use the docker daemon on the host, for running builds
+        # see https://stackoverflow.com/questions/27879713/is-it-ok-to-run-docker-from-inside-docker
+        - name: docker-sock-volume
+          hostPath:
+            path: /var/run/docker.sock
+        - name: jenkins-home
+          hostPath:
+            path: /mnt/jenkins-store
+      serviceAccountName: jenkins
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  namespace: default
+spec:
+  type: NodePort
+  ports:
+    - name: ui
+      port: 8080
+      targetPort: 8080
+      nodePort: 31000
+    - name: jnlp
+      port: 50000
+      targetPort: 50000
+  selector:
+    app: jenkins
+---
+
+Step 4
+Check the image created in Step 2 to be edited in Step 3
+Run the yaml file 
+kubectl create -f << >>
+
+Step 5
+kubectl get pods
+minikube service jenkins
+
+Step 6
+Use the password of the InitialAdminPassword and paste the contents.
+Click New Item - Empty Project
+
+In Jenkins -Manage Jenkins
+Manage Nodes and Cloud
+Configure Clouds
+Add Cloud - Docker
+docker host URI : unix://var/run/docker.sock
+Test Connection
+Click Save. 
+
+
+Step 7
+Install GIT repository
+
+Add Repository URL - https://github.com/dhanan77/testrepo-jenkins.git
+Keep the Branch Blank
+
+Install Docker API Plugin
+
+Add a Step in Build /Publish Docker Image 
+Directory for Dockerfile : .
+Cloud : Use docker
+Image : <<hubusername>>/simpleimnagewithci
+Push Image
+Add Regisrty Credentials
+
+Step 8
+
+kubernetes-cli
+Manage Plugins
+Kubernetes CLI
+
+Build Triggers for Project - Click Configure Kubernetes CLI
+Credentials - Add Secret Credentials
+Add Kubernetes Server End Point (Kubernetes Server in Config File)
+Cluster Name : minikube
+context Name : minikube
+Namespace: default
+Certificate of Certificate Authority : copy paste the certificate(refer certificate-authority: C:\Users\HP\.minikube\ca.crt)
+
+Add a Build Step - Execute shell and bring the below commands
+
+apt-get install -y apt-transport-https ca-certificates curl
+apt-get -y install kubectl
+curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+apt-get -y update
+apt-get -y install kubectl
+kubectl version
+
+Step 9
+Verify the Build Job Configuration
+Click Build Now
+
+Step 10
+Verify Build Status 
+Verify Console Output
